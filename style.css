@@ -35,10 +35,15 @@ div.topstat {
   }
 }
 
-div.mascstat {
+div.topbox2 {
+  display: flex
+/*  table-position: fixed; */
+}
+
+div.topstat2 {
   display: table-cell;
-  border-left: 8px solid #999933;
-  width: 25%;
+  border-left: 8px solid #1d1d1d;
+  width: 50%;
   padding-left: 12px;
   padding-right: 8px;
   background-color: #ffffff;
@@ -46,14 +51,32 @@ div.mascstat {
   text-align: left
 }
 
-.mascstat h2 {
-  color: #999933;
+.topstat2 h2 {
+  color: #1d1d1d;
 }
 
-div.femstat {
+@media only screen and (max-width: 640px) {
+  
+  div.topbox2 { 
+    flex-direction: row;
+    flex-wrap: wrap;
+    display: flex;
+  }
+  
+  div.topstat2 { 
+    flex: 100%; 
+  }
+}
+
+div.topbox3 {
+  display: flex
+/*  table-position: fixed; */
+}
+
+div.topstat3 {
   display: table-cell;
-  border-left: 8px solid #882255;
-  width: 25%;
+  border-left: 8px solid #1d1d1d;
+  width: 33.33%;
   padding-left: 12px;
   padding-right: 8px;
   background-color: #ffffff;
@@ -61,36 +84,19 @@ div.femstat {
   text-align: left
 }
 
-.femstat h2 {
-  color: #882255;
+.topstat3 h2 {
+  color: #1d1d1d;
 }
 
-div.neutstat {
-  display: table-cell;
-  border-left: 8px solid #88CCEE;
-  width: 25%;
-  padding-left: 12px;
-  padding-right: 8px;
-  background-color: #ffffff;
-  margin: 2px;
-  text-align: left
-}
-
-.neutstat h2 {
-  color: #88CCEE;
-}
-
-div.neostat {
-  display: table-cell;
-  border-left: 8px solid #44AA99;
-  width: 25%;
-  padding-left: 12px;
-  padding-right: 8px;
-  background-color: #ffffff;
-  margin: 2px;
-  text-align: left
-}
-
-.neostat h2 {
-  color: #44AA99;
+@media only screen and (max-width: 640px) {
+  
+  div.topbox3 { 
+    flex-direction: row;
+    flex-wrap: wrap;
+    display: flex;
+  }
+  
+  div.topstat3 { 
+    flex: 100%; 
+  }
 }
