@@ -3,8 +3,8 @@ body {
 }
 
 div.topbox {
-  display: table;
-  table-layout: fixed;
+  display: flex
+/*  table-position: fixed; */
 }
 
 div.topstat {
@@ -20,6 +20,19 @@ div.topstat {
 
 .topstat h2 {
   color: #1d1d1d;
+}
+
+@media only screen and (max-width: 640px) {
+  
+  div.topbox { 
+    flex-direction: row;
+    flex-wrap: wrap;
+    display: flex;
+  }
+  
+  div.topstat { 
+    flex: 100%; 
+  }
 }
 
 div.mascstat {
