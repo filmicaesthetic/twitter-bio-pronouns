@@ -1,0 +1,83 @@
+body {
+  font-family: Comfortaa;
+}
+
+div.topbox {
+  display: table;
+  table-layout: fixed;
+}
+
+div.topstat {
+  display: table-cell;
+  border-left: 8px solid #1d1d1d;
+  width: 25%;
+  padding-left: 12px;
+  padding-right: 8px;
+  background-color: #ffffff;
+  margin: 2px;
+  text-align: left
+}
+
+.topstat h2 {
+  color: #1d1d1d;
+}
+
+div.mascstat {
+  display: table-cell;
+  border-left: 8px solid #999933;
+  width: 25%;
+  padding-left: 12px;
+  padding-right: 8px;
+  background-color: #ffffff;
+  margin: 2px;
+  text-align: left
+}
+
+.mascstat h2 {
+  color: #999933;
+}
+
+div.femstat {
+  display: table-cell;
+  border-left: 8px solid #882255;
+  width: 25%;
+  padding-left: 12px;
+  padding-right: 8px;
+  background-color: #ffffff;
+  margin: 2px;
+  text-align: left
+}
+
+.femstat h2 {
+  color: #882255;
+}
+
+div.neutstat {
+  display: table-cell;
+  border-left: 8px solid #88CCEE;
+  width: 25%;
+  padding-left: 12px;
+  padding-right: 8px;
+  background-color: #ffffff;
+  margin: 2px;
+  text-align: left
+}
+
+.neutstat h2 {
+  color: #88CCEE;
+}
+
+div.neostat {
+  display: table-cell;
+  border-left: 8px solid #44AA99;
+  width: 25%;
+  padding-left: 12px;
+  padding-right: 8px;
+  background-color: #ffffff;
+  margin: 2px;
+  text-align: left
+}
+
+.neostat h2 {
+  color: #44AA99;
+}

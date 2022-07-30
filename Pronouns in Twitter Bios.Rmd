@@ -1,0 +1,579 @@
+---
+title: "Pronouns In Twitter Bios"
+date: "15/07/2022"
+output:
+  html_document:
+    theme: paper
+    css: style.css
+---
+
+<head>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Comfortaa">
+</head>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+#knitr::asis_output("\U0001f30a")
+
+pacman::p_load(ggplot2, treemapify, showtext, waffle, dplyr, plotly, ggpomological, magick, showtext, forcats, stringr, gt, utf8, Unicode, tm, rvest, rtweet, packcircles, ggiraph, ggraph, igraph, stringr, tidyr)
+
+font_add_google("Comfortaa", "Comfortaa")
+showtext_auto()
+
+class_summary <- read.csv("data/plot_data/class_summary.csv")
+neo_plot_df <- read.csv("data/plot_data/neo_plot_df.csv")
+pron_df <- read.csv("data/plot_data/pronoun_df.csv")
+emoji_df <- read.csv("data/plot_data/emoji_df_count.csv")
+emoji_lkp_tbl <- read.csv("data/plot_data/emoji_lkp_tbl.csv")
+edges <- read.csv("data/plot_data/edges.csv")
+vertices <- read.csv("data/plot_data/vert.csv")
+
+pal <- c("Masculine pronouns only" = "#999933",
+         "Feminine pronouns only" = "#882255",
+         "Traditional neutral pronouns only" = "#88CCEE",
+         "Masculine and feminine only" = "#661100",
+         "Feminine and traditional neutral combo" = "#AA4499",
+         "Masculine and traditional neutral combo" = "#DDCC77",
+         "All traditional pronouns" = "#1d1d1d",
+         "Neo and traditional combo" = "#6699CC",
+         "Neopronouns only" = "#44AA99")
+```
+
+This exploratory data analysis project explores the personal pronouns of Twitter users. Despite <a href="https://www.pinknews.co.uk/2021/05/20/twitter-pronouns-about-tab/">announcements in May 2021</a> and further speculation in March 2022, at the time of writing in July 2022, Twitter has still not yet provided the inclusive feature which have been available for over a year now on platforms like <a href="https://www.theguardian.com/technology/2021/may/12/instagram-pronouns-users-gender-identity">Instagram</a> and <a href="https://www.pride.com/news/2021/3/30/you-can-now-add-pronouns-your-linkedin-profile">LinkedIn</a>. Without a dedicated space for users to add their preferred pronouns to their profile, the text from users' bios and usernames was scraped and analysed to identify words and patterns that match those commonly used when expressing personal pronouns.
+
+```{r}
+# stats
+total_users <- sum(class_summary$count) * 10
+total_gnc <- sum(class_summary$count[class_summary$class %in% c("Gender non-conforming pronouns")]) * 10
+total_neo <- sum(class_summary$count[class_summary$gnc_class %in% c("Neopronouns only", "Neo and traditional combo")]) * 10
+
+# top stats
+gnc_perc <- sum(total_gnc / total_users) * 100
+
+# neopronouns stats
+combo_neo <- sum(class_summary$count[class_summary$gnc_class %in% c("Neo and traditional combo")]) * 10
+only_neo <- sum(class_summary$count[class_summary$gnc_class %in% c("Neopronouns only")]) * 10
+neo_perc <- total_neo / total_users * 100
+only_perc <- only_neo / total_neo * 100
+combo_perc <- combo_neo / total_neo * 100
+neo_gnc_perc <- total_neo / total_gnc * 100
+```
+
+
+## Summary
+
+Analysis of approximately 158,000 unique Twitter profiles, exploring gender identities of users by extracting personal pronouns from user-defined profile text.
+
+Overview of findings:
+
+:::: {}
+
+::: {#top_1 .topstat}
+## **`r scales::comma(total_users)`**
+
+Total profiles with preferred **personal pronouns identified**
+:::
+
+::: {#top_2 .topstat}
+## **`r round(gnc_perc, 1)`%**
+
+of users with identified pronouns use **gender non-conforming pronouns**
+:::
+
+::: {#top_3 .topstat}
+## **`r round(neo_gnc_perc, 1)`%**
+
+of users with gender non-conforming pronouns use **neopronouns**
+:::
+
+::::
+
+## Data Collection
+
+The main data explored here is a dataset of around 220,000 individual tweets collected via the Twitter API along with the creator's username and bio as text fields. The tweets came from 157,625 unique accounts, and were collected over a two-day period by searching for tweets containing common English words found in the NLTK English stopwords list, excluding any personal pronouns.
+
+While Twitter profile information is publicly accessible data, when combined with the methods used to classify profiles based on the presence of pronouns, it provides a level of searchability outside the scope of the usual Twitter search functions. I've made the decision not to share the original dataset due to ethical and safety concerns, so this analysis explores aggregated results with no uniquely identifiable personal information.
+
+:::: {style="display: flex;"}
+
+::: {style="width: 50%"}
+#### Data
+
+* User ID
+* User display name
+* User bio text
+* Text content of tweet
+
+:::
+
+::: {style="width: 50%"}
+#### Assumptions
+
+* Bios using singular pronouns are from accounts representing an individual human rather than a brand.
+* Pronouns identified are this person's genuine preferred pronouns
+:::
+
+::::
+
+## Extracting pronouns from bio and username text
+
+A list of common English pronouns was compiled, along with a list of common neopronouns from the <a href="https://lgbtqia.fandom.com/wiki/Pronoun">LGBTQIA+ Wiki</a>
+
+> #### he/they
+> #### she/her
+> #### xe/xem
+
+ *Common format for displaying preferred pronouns*
+
+After exploring the bio text, it was clear that while most people abide by the conventional pronoun format of listing preferred two third-person personal pronouns separated by a forward slash ('xxx/xxx'), this became more complex as more than two pronouns were listed (eg. 'he/she/they' or 'he/him and they/them'.)
+
+I made the choice to search each pronoun individually rather than as pairs, and searching the surrounding letters for confirmation of context. Each pronoun must be followed by or preceded by a forward slash, with no other alphanumeric character immediately at the other end. This helped with capturing more pronouns from bios that are often formatted for brevity (eg. 'occupation|she/her|hobbies...) and capturing all chosen pronouns for each person.
+
+#### Pattern used for matching individual pronouns
+``` {r eval = FALSE, echo = TRUE}
+"(?<![a-z0-9])she(?=\/)|(?<=\/)she(?![a-z0-9])"
+```
+
+
+## Pronoun Use Overall
+
+``` {r}
+pron_perc <- round(sum(pron_df$count[pron_df$pronoun_check == "Pronouns identified"]) / sum(pron_df$count) * 100, 1)
+```
+
+Preferred pronouns were specified in an identifiable format in `r pron_perc`% of Twitter users in the sample collected.
+
+Adding, or not adding, pronouns to your Twitter profile is a decision that may be made for many reasons, from ideological to personal safety, so while this is a large enough sample to explore the variety of pronouns used, it is not representative of the Twitter community as a whole.
+
+```{r fig.width=10, fig.height=2.5}
+
+pron_df %>%
+  ggplot() +
+  geom_waffle(aes(fill = pronoun_check, values = count), color = "#fffeea", size = .25, n_rows = 5, make_proportional = TRUE) +
+  scale_fill_manual(values=c("No pronouns identified" = "#d4d4d4", "Pronouns identified" = "#4a3d1e")) +
+  coord_equal() +
+  labs(fill = "PRONOUNS\nIN PROFILES", caption = "Data: Twitter | Visualisation: @filmicaesthetic") +
+  theme(text = element_text(family = "Comfortaa", color = "#54544d", size = 36),
+        axis.text = element_blank(),
+        plot.background = element_rect(fill = "#f5f5f5", color = "#f5f5f5"),
+        panel.background = element_rect(fill = "#f5f5f5", color = "#f5f5f5"),
+        legend.position = "left",
+        legend.background = element_rect(fill = "#f5f5f5", color = "#f5f5f5"),
+        plot.caption = element_text(size = 10),
+        panel.grid = element_blank(),
+        axis.ticks = element_blank(),
+        strip.background = element_blank(),
+        legend.justification = c("left", "top"),
+        legend.title = element_text(face = "bold", lineheight = 0.5),
+        legend.text = element_text(size = 18),
+        strip.text = element_text(color = "#54544d", hjust = 0),
+        panel.border = element_blank())
+```
+*Each square in this plot represents 1% of the overall sample population.*
+
+## Pronoun use by gender group
+
+In order to produce the final classifications, the first step was to identify pronouns in the following four groups: masculine, feminine, traditional gender-neutral pronouns and gender-neutral neopronouns. Further classification was produced by checking for the combinations of these 4 types.
+
+Despite searching for tweets containing English words in the data collection language tweets, there were still a number pronouns provided in other languages. Most commonly Portuguese, with some German and French pronouns also identified. These were treated in the same way as their closest English translations.
+
+Although "it", "its", "thy" and "thou" pronouns are not commonly used like they/them pronouns, they have been classified as traditional gender-neutral pronouns because they are existing pronouns within the English language. This is significantly different to neopronouns, which are generally new words created by gender non-conforming people as a deliberate evolution of language that aligns with their identities.
+
+:::: {}
+
+::: {#top_1 .mascstat}
+## **Masculine**
+
+* he / him / his
+* ele / dele (Portuguese)
+* er / ihn (German)
+
+:::
+
+::: {#top_2 .femstat}
+## **Feminine**
+
+* she / her / hers
+* ela / ella / dela (Portuguese)
+* ihr (German)
+
+:::
+
+::: {#top_3 .neutstat}
+## **Neutral**
+
+* they / them / theirs
+* elu / delu (Portuguese)
+* iel (French)
+* it / its / itself
+* thy / thou / thee
+
+:::
+
+::: {#top_4 .neostat}
+## **Neopronouns**
+
+* xe/ xem / xey
+* ve / ver / vem
+* fae / ae / faer / aer
+* ey / e / em / erself
+* ze / hir / zir / zim/ zis
+
+:::
+
+::::
+
+*Note: "sie" has been removed from the classification process as it is both a common neopronoun and German for "she" and appeared to be used in both contexts in the dataset.*
+
+
+``` {r fig.width=10, fig.height=5.5}
+# Waffle chart
+class_summary %>% 
+  ggplot() +
+  geom_waffle(aes(fill = gnc_class, values = count), color = "#fffeea", size = .25, n_rows = 10) +
+  facet_wrap(~class, strip.position = "top", nrow = 3, labeller = labeller(groupwrap = label_wrap_gen(6))) +
+  # annotate(geom = "segment", x = 1, xend = 2, y = 1, yend = 4) +
+  scale_fill_manual(values=pal) +
+  labs(caption = "Data: Twitter | Visualisation: @filmicaesthetic") +
+  coord_equal() +
+  theme_pomological() +
+  labs(fill = "PRONOUN USE\nBY GENDER TYPE\n") +
+  theme(text = element_text(family = "Comfortaa", color = "#54544d", size = 36),
+        axis.text = element_blank(),
+        plot.background = element_rect(fill = "#f5f5f5", color = "#f5f5f5"),
+        panel.background = element_rect(fill = "#f5f5f5", color = "#f5f5f5"),
+        legend.position = "left",
+        legend.background = element_rect(fill = "#f5f5f5", color = "#f5f5f5"),
+        plot.caption = element_text(size = 10),
+        panel.grid = element_blank(),
+        axis.ticks = element_blank(),
+        strip.background = element_blank(),
+        legend.justification = c("left", "top"),
+        legend.title = element_text(face = "bold", lineheight = 0.5),
+        legend.text = element_text(size = 18),
+        strip.text = element_text(color = "#54544d", hjust = 0),
+        panel.border = element_blank())
+```
+*Each square in this plot represents 10 users.*
+
+We can't be sure how many of the bios analysed are brand accounts - classification of brand/human accounts was deemed unnecessary in this case as the focus of the research is on exploring the range of pronouns in those accounts that do specify a preference, and it has been assumed that bios containing singular pronouns represent individuals, however it is worth noting that accounts with gender non-conforming pronouns make up over 2% of the total sample population.
+
+## Exploring gender non-conforming pronoun combinations
+
+The interactive plot below allows you to explore the unique combinations provided by users, and provides some transparency on how these combinations were classified into more general groups. This shows differences in pronoun word choice (ie. she/they vs. she/them) but does not differentiate between the order they were provided in (eg. she/they & they/she are grouped)
+
+```{r fig.width=10, fig.height=11.2}
+
+# vertices <- vertices %>%
+#   mutate(gnc_class = str_wrap(gnc_class, 20))
+
+mygraph <- graph_from_data_frame( edges, vertices=vertices)
+
+circle_pal <- c("Traditional neutral pronouns only" = "#88CCEE",
+         "Masculine and feminine only" = "#661100",
+         "Feminine and traditional neutral combo" = "#AA4499",
+         "Masculine and traditional neutral combo" = "#DDCC77",
+         "All traditional pronouns" = "#1d1d1d",
+         "Neo and traditional combo" = "#6699CC",
+         "Neopronouns only" = "#44AA99")
+
+# Control the size of each circle: (use the size column of the vertices data frame)
+gg <- ggraph(mygraph, layout = 'circlepack', weight=count) + 
+  geom_node_circle(aes(alpha = (depth * (depth - 1)))) +
+  geom_point_interactive(alpha = 0.7,
+                         mapping = aes(x = x, y = y, data_id = shortName, size = count, color = gnc_class,
+                                       tooltip = paste0("Pronouns: ", shortName, "\nCount: ", count))) +
+  #geom_node_label( aes(label=label), size=4) +
+  scale_color_manual(values = circle_pal, na.value = "#ffffff") +
+  scale_size(range = c(0,93)) +
+  labs(color = "") +
+  theme_void() +
+  guides(size = "none", alpha = "none", color = guide_legend(nrow = 4, override.aes = list(size=8))) +
+  theme(legend.position = "bottom",
+        text = element_text(family = "Comfortaa", size = 20)
+        )
+
+ggiraph(ggobj = gg, width_svg = 10, height_svg = 11.2)
+
+```
+
+## Neopronouns
+
+```{r}
+
+
+```
+
+> "Neopronouns are a category of new (neo) pronouns that are increasingly used in place of “she,” “he,” or “they” when referring to a person. Some examples include: xe/xem/xyr, ze/hir/hirs, ey/em/eir, and fae/faer/faers."
+>
+> K.R. Blevins | <a href="https://www.mykidisgay.com/blog/defining-neopronouns">mykidisgay.com/blog/defining-neopronouns</a>
+
+The use of neopronouns dates back hundreds of years, with the most notable example being the pronoun "thon", thought to be a contraction of "that one", and originally coined in 1858 by Charles Crozat Converse. It has continued to be used to this day, and was even <a href="https://www.merriam-webster.com/words-at-play/third-person-gender-neutral-pronoun-thon">added to the Merriam-Webster dictionary in 1934.</a>
+
+<a href="https://www.nytimes.com/2021/04/08/style/neopronouns-nonbinary-explainer.html">Modern neopronouns developed in the Tumblr community</a>, where the noun-self form of pronouns (bun/bunself, vamp/vampself, fae/faeself) started to be used from around 2012 and have evolved within the community since then. The analysis below shows that the most commonly used neopronouns now have evolved into words closer in form to traditional pronouns, with one significant exception.
+
+:::: {}
+
+::: {#top_1 .topstat}
+## **`r round(neo_perc, 2)`%**
+
+of users with pronouns identified use neopronouns
+:::
+
+::: {#top_2 .topstat}
+## **`r round(neo_gnc_perc, 2)`%**
+
+of gender non-conforming accounts use neopronouns
+:::
+
+::: {#top_3 .topstat}
+## **`r round(combo_perc, 2)`%**
+
+of those who use neopronouns use them in combination with traditional pronouns.
+:::
+
+::::
+
+```{r fig.width=10, fig.height=5}
+neo_pal <- pal[names(pal) %in% c("Neopronouns only", "Neo and traditional combo")]
+
+data.frame(neo_plot_df) %>%
+  mutate(neopronoun = fct_reorder(neopronoun, -count, sum)) %>%
+  ggplot() +
+  geom_waffle(aes(fill = gnc_class, values = count), color = "#fffeea", size = .25, n_rows = 2) +
+  facet_wrap(~neopronoun, strip.position = "top", nrow = 7, labeller = labeller(groupwrap = label_wrap_gen(6))) +
+  scale_fill_manual(values=neo_pal) +
+  coord_equal() +
+  theme_pomological() +
+  labs(fill = "USE OF\nNEOPRONOUNS\n", caption = "Data: Twitter | Visualisation: @filmicaesthetic") +
+  theme(text = element_text(family = "Comfortaa", color = "#54544d", size = 36),
+        axis.text = element_blank(),
+        plot.background = element_rect(fill = "#f5f5f5", color = "#f5f5f5"),
+        panel.background = element_rect(fill = "#f5f5f5", color = "#f5f5f5"),
+        legend.position = "left",
+        panel.grid = element_blank(),
+        plot.caption = element_text(size = 10),
+        legend.background = element_rect(fill = "#f5f5f5", color = "#f5f5f5"),
+        axis.ticks = element_blank(),
+        strip.background = element_blank(),
+        legend.justification = c("left", "top"),
+        legend.title = element_text(face = "bold", lineheight = 0.5),
+        legend.text = element_text(size = 18),
+        strip.text = element_text(color = "#54544d", hjust = 0),
+        panel.border = element_blank())
+
+```
+*Each square in this plot represents 1 user.* 
+
+# **Further analysis of the dataset**
+
+For this further analysis of the dataset, the users are split into four groups:
+
+> Masculine pronouns only
+>
+> Feminine pronouns only
+>
+> Gender non-conforming pronouns
+>
+> No pronouns provided
+>
+
+For each group, a sample of 3,000 users were randomly selected.
+
+## Most frequent words used in bio text by gender group
+
+```{r}
+search_pal <- c("Masculine pronouns only" = "#e8b139",
+         "Feminine pronouns only" = "#c06ee6",
+         "Gender non-conforming pronouns" = "#6cce96",
+         "No pronouns provided" = "grey")
+
+top_10 <- read.csv("data/top_10_words_by_group.csv")
+
+top_10_wide <- top_10 %>%
+  select(-n) %>%
+  pivot_wider(id_cols = c(word_rank), names_from = "class", values_from = "word") %>%
+  rename(`Word Rank` = word_rank)
+
+gt(top_10_wide)
+
+```
+
+
+## Bio text analysis
+
+The sections below will explore some of the common word groups seen in the table above, by checking for the presence of words within profiles. While it may be assumed that numbers in profile bios will generally be related to the age of the user, or terms like "bi", "gay" or "trans" are used to represent the users' identities, there is no common format as there is for pronouns, so the context of the words is not certain.
+
+
+## Age, or numbers, in Twitter bios
+
+If we assume the numbers seen in bios represent the users' age, we can see that those who provide pronouns are generally younger than those who do not.
+
+However, it can be seen from the charts that numbers like 18, 30 and 50 have spikes, which signals that a significant amount of numbers are likely being used in a context unrelated to the user's age.
+
+```{r fig.width=10, fig.height=4}
+bio_numbers <- read.csv("data/bio_numbers.csv")
+
+bio_numbers %>%
+  ggplot(aes(x = word, y = n)) +
+  geom_col(aes(fill = class)) +
+  geom_smooth(method = "lm", color = "#1d1d1d", se = F) +
+  scale_fill_manual(values = search_pal) +
+  facet_wrap(~class, nrow = 1) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(x = "Number in bio", y = "% of profiles", caption = "Data: Twitter | Visualisation: @filmicaesthetic") +
+  theme_minimal() +
+  theme(text = element_text(family = "Comfortaa", color = "#54544d", size = 36),
+        plot.background = element_rect(fill = "#f5f5f5", color = "#f5f5f5"),
+        axis.text = element_text(size = 12),
+        panel.background = element_rect(fill = "#f5f5f5", color = "#f5f5f5"),
+        legend.position = "none",
+        panel.grid = element_blank(),
+        plot.caption = element_text(size = 10),
+        legend.background = element_rect(fill = "#f5f5f5", color = "#f5f5f5"),
+        axis.ticks = element_blank(),
+        strip.background = element_blank(),
+        legend.justification = c("left", "top"),
+        legend.title = element_text(face = "bold", lineheight = 0.5),
+        legend.text = element_text(size = 18),
+        strip.text = element_text(color = "#54544d", hjust = 0),
+        panel.border = element_blank())
+```
+
+## LGBTQIA+ representation within groups
+
+While displaying pronouns in social media profiles and email signatures is now relatively common online and in workplaces, the inclusive idea initially grew within the LGBTQIA+ community, and the table above shows that there is still very strong LGBTQIA+ representation among those who use bios in their pronouns, with words like "queer", "trans", "bi" and "gay" appearing in the most-frequently used words list for each group, and not so commonly in the group with no pronouns identified.
+
+The proportion of profiles with any individual word is very low for all groups (maximum of just over 1%) - this may be due to Twitter users more commonly displaying their identities with emojis, or combinations of emojis. Unfortunately in the format the text was extracted, there are many emojis that share the same unicode characters, so I was unable to confidently extract context from the emoji codes.
+
+## LGBTQ
+
+The most widely used identifiers are the first 5 letters of the LGBTQIA+ acronym.
+
+```{r fig.width=10, fig.height=2.5}
+word_search <- read.csv("data/word_search.csv")
+
+## gender
+gender_words <- c("agender", "bigender", "demigender", "genderfluid", "genderqueer", "neurogender", "neutrois", "nonbinary", "pangender", "xenogender")
+
+sexuality_words <- c("abrosexual", "achillean", "allosexual", "asexual", "bisexual", "ceterosexual", "demisexual", "gay", "greysexual", "lesbian", "omnisexual", "pansexual", "polysexual", "queer", "sapphic")
+
+romantic_words <- c("abroromantic", "alloromantic", "aromantic", "biromantic", "demiromantic", "greyromantic", "heteroromantic", "homoromantic", "panromantic", "polyromantic")  
+
+abbrev_words <- c("pan", "poly", "bi", "allo", "aro", "abro", "demi", "xeno", "ace", "intersex", "polyamorous")
+
+top_lgbtqia_words <- c("lesbian", "gay", "bi", "trans", "queer")
+
+all_lgbtqia_words <- c(gender_words, sexuality_words, romantic_words, abbrev_words)
+
+all_lgbtqia_words <- all_lgbtqia_words[!(all_lgbtqia_words %in% top_lgbtqia_words)]
+
+word_search %>%
+  filter(word %in% top_lgbtqia_words) %>%
+  group_by(class, word) %>%
+  summarise(n = sum(perc)) %>%
+  ggplot(aes(x = class, y = n)) +
+  geom_col(aes(fill = class)) +
+  scale_y_continuous(labels = scales::percent) +
+  scale_fill_manual(values = search_pal) +
+  coord_polar() +
+  labs(y = "% of profiles containing word", caption = "Data: Twitter | Visualisation: @filmicaesthetic") +
+  facet_wrap(~word, nrow = 1) +
+  theme(text = element_text(family = "Comfortaa", color = "#54544d", size = 36),
+        plot.background = element_rect(fill = "#f5f5f5", color = "#f5f5f5"),
+        axis.text.x = element_blank(),
+        axis.title = element_blank(),
+        panel.grid = element_line(color = "grey"),
+        panel.background = element_rect(fill = "#f5f5f5", color = "#f5f5f5"),
+        legend.position = "none",
+        plot.caption = element_text(size = 10),
+        legend.background = element_rect(fill = "#f5f5f5", color = "#f5f5f5"),
+        axis.ticks = element_blank(),
+        strip.background = element_blank(),
+        legend.justification = c("left", "top"),
+        legend.title = element_text(face = "bold", lineheight = 0.5),
+        legend.text = element_text(size = 18),
+        strip.text = element_text(color = "#54544d", hjust = 0),
+        panel.border = element_blank())
+```
+
+## Other LGBTQIA+ identities
+
+A list of LGBTQIA+ identity terms was compiled from the LGBTQIA+ Wiki (<a href="https://lgbtqia.fandom.com/wiki/Sexual_orientation">sexual orientation</a>, <a href="https://lgbtqia.fandom.com/wiki/Gender_identity">gender identity</a>, <a href="https://lgbtqia.fandom.com/wiki/Romantic_orientation">romantic attraction</a>) and <a href="https://www.stonewall.org.uk/help-advice/faqs-and-glossary/list-lgbtq-terms">Stonewall</a> websites, and the terms listed below appeared most frequently in the user bios analysed.
+
+```{r fig.width=10,fig.height=5}
+word_search %>%
+  filter(word %in% all_lgbtqia_words) %>%
+  group_by(class, word) %>%
+  summarise(n = sum(perc)) %>%
+  group_by(word) %>%
+  filter(max(n) > 0.001) %>%
+  ungroup() %>%
+  ggplot(aes(x = class, y = n)) +
+  geom_col(aes(fill = class)) +
+  scale_y_continuous(labels = scales::percent) +
+  scale_fill_manual(values = search_pal) +
+  coord_polar() +
+  labs(y = "% of profiles containing word", caption = "Data: Twitter | Visualisation: @filmicaesthetic") +
+  facet_wrap(~word, ncol = 5) +
+  theme(text = element_text(family = "Comfortaa", color = "#54544d", size = 36),
+        plot.background = element_rect(fill = "#f5f5f5", color = "#f5f5f5"),
+        axis.text.x = element_blank(),
+        axis.title = element_blank(),
+        panel.grid = element_line(color = "grey"),
+        panel.background = element_rect(fill = "#f5f5f5", color = "#f5f5f5"),
+        legend.position = "none",
+        plot.caption = element_text(size = 10),
+        legend.background = element_rect(fill = "#f5f5f5", color = "#f5f5f5"),
+        axis.ticks = element_blank(),
+        strip.background = element_blank(),
+        legend.justification = c("left", "top"),
+        legend.title = element_text(face = "bold", lineheight = 0.5),
+        legend.text = element_text(size = 18),
+        strip.text = element_text(color = "#54544d", hjust = 0),
+        panel.border = element_blank())
+```
+
+# Autism & ADHD
+
+Autism and ADHD are conditions that have become closely linked with the LGBTQIA+ community, and the proportion of users with "autistic", "ADHD", or "neurodivergent" is much higher in groups with pronouns identified vs. those without. There is a particularly high proportion of gender non-conforming users who also identify as autistic.
+
+> "Current research indicates that autistic people have higher rates of LGBT identities and feelings than the general population. A variety of explanations for this have been proposed; The Lancet's 'Commission on the future of care and clinical research in autism' commented that it 'might be part of a different concept of self, less reliance on or reference to social norms, or part of a neurodiverse lived experience of (and outlook on) the world.' While autistic people are more likely to be non-heterosexual than the general population, the majority of autistic people are heterosexual."
+>
+> Autism & LGBT Identities | <a href="https://www.wikiwand.com/en/Autism_and_LGBT_identities">wikiwand.com</a>
+
+
+
+## Terms
+
+```{r fig.width=10, fig.height=4}
+
+data.frame(word_search) %>%
+  filter(word %in% c("autistic", "adhd", "neurodivergent")) %>%
+  mutate(class = fct_reorder(as.factor(class), perc, sum)) %>%
+  ggplot(aes(x = class, y = perc)) +
+  geom_col(aes(fill = class)) +
+  scale_fill_manual(values = search_pal) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(y = "% of profiles containing word", caption = "Data: Twitter | Visualisation: @filmicaesthetic") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+        legend.position = "none") +
+  facet_wrap(~word, nrow = 1) +
+  theme(text = element_text(family = "Comfortaa", color = "#54544d", size = 36),
+        plot.background = element_rect(fill = "#f5f5f5", color = "#f5f5f5"),
+        axis.text.x = element_blank(),
+        axis.title = element_blank(),
+        panel.grid = element_blank(),
+        panel.background = element_rect(fill = "#f5f5f5", color = "#f5f5f5"),
+        legend.position = "none",
+        plot.caption = element_text(size = 10),
+        legend.background = element_rect(fill = "#f5f5f5", color = "#f5f5f5"),
+        axis.ticks = element_blank(),
+        strip.background = element_blank(),
+        legend.justification = c("left", "top"),
+        legend.title = element_text(face = "bold", lineheight = 0.5),
+        legend.text = element_text(size = 18),
+        strip.text = element_text(color = "#54544d", hjust = 0),
+        panel.border = element_blank())
+```
