@@ -2,6 +2,31 @@ body {
   font-family: Comfortaa;
 }
 
+.title {
+  display: none;
+}
+
+.header-image {
+  width: 100%;
+  height: 400px;
+  background: url("https://images.unsplash.com/photo-1605818363303-7073f9171de9?ixlib=rb-1.2.1&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=870&q=80") center center no-repeat;
+  background-size: cover;
+  text-align: left;
+  position: relative;
+}
+
+.header-image span {
+  padding: 5px 5px 5px 5px;
+  background-color: #44AA99;
+  opacity: 0.85;
+  color: #1d1d1d;
+  font-size: 22pt;
+  line-height: 150%;
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+}
+
 div.topbox {
   display: flex
 /*  table-position: fixed; */
