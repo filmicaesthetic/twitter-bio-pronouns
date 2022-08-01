@@ -16,11 +16,11 @@ body {
 }
 
 .header-image span {
-  padding: 5px 5px 5px 5px;
+  padding: 3px 2px 3px 2px;
   background-color: #44AA99;
   opacity: 0.85;
   color: #1d1d1d;
-  font-size: 22pt;
+  font-size: 18pt;
   line-height: 150%;
   position: absolute;
   left: 10px;
